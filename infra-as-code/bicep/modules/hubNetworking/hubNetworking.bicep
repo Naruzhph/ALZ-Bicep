@@ -160,6 +160,9 @@ param parAzFirewallEnabled bool = true
 @sys.description('Azure Firewall Name.')
 param parAzFirewallName string = '${parCompanyPrefix}-azfw-${parLocation}'
 
+@sys.description('Set this to true for the initial deployment as one firewall policy is required. Set this to false in subsequent deployments if using custom policies.')
+param parAzFirewallPoliciesEnabled bool = true
+
 @sys.description('Azure Firewall Policies Name.')
 param parAzFirewallPoliciesName string = '${parCompanyPrefix}-azfwpolicy-${parLocation}'
 
@@ -179,15 +182,14 @@ param parAzFirewallTier string = 'Standard'
 ])
 param parAzFirewallIntelMode string = 'Alert'
 
+@sys.description('Optional List of Custom Public IPs, which are assigned to firewalls ipConfigurations.')
+param parAzFirewallCustomPublicIps array = []
+
 @allowed([
   '1'
   '2'
   '3'
 ])
-
-@sys.description('Optional List of Custom Public IPs, which are assigned to firewalls ipConfigurations.')
-param parAzFirewallCustomPublicIps array = []
-
 @sys.description('Availability Zones to deploy the Azure Firewall across. Region must support Availability Zones to use. If it does not then leave empty.')
 param parAzFirewallAvailabilityZones array = []
 
@@ -286,7 +288,7 @@ param parPrivateDnsZones array = [
   'privatelink.gremlin.cosmos.azure.com'
   'privatelink.guestconfiguration.azure.com'
   'privatelink.his.arc.azure.com'
-  'privatelink.kubernetesconfiguration.azure.com'
+  'privatelink.dp.kubernetesconfiguration.azure.com'
   'privatelink.managedhsm.azure.net'
   'privatelink.mariadb.database.azure.com'
   'privatelink.media.azure.net'
@@ -404,9 +406,9 @@ param parBastionOutboundSshRdpPorts array = [ '22', '3389' ]
 var varSubnetMap = map(range(0, length(parSubnets)), i => {
     name: parSubnets[i].name
     ipAddressRange: parSubnets[i].ipAddressRange
-    networkSecurityGroupId: contains(parSubnets[i], 'networkSecurityGroupId') ? parSubnets[i].networkSecurityGroupId : ''
-    routeTableId: contains(parSubnets[i], 'routeTableId') ? parSubnets[i].routeTableId : ''
-    delegation: contains(parSubnets[i], 'delegation') ? parSubnets[i].delegation : ''
+    networkSecurityGroupId: parSubnets[i].?networkSecurityGroupId ?? ''
+    routeTableId: parSubnets[i].?routeTableId ?? ''
+    delegation: parSubnets[i].?delegation ?? ''
   })
 
 var varSubnetProperties = [for subnet in varSubnetMap: {
@@ -768,15 +770,15 @@ resource resGateway 'Microsoft.Network/virtualNetworkGateways@2023-02-01' = [for
       tier: gateway.sku
     }
     vpnClientConfiguration: (toLower(gateway.gatewayType) == 'vpn') ? {
-      vpnClientAddressPool: contains(gateway.vpnClientConfiguration, 'vpnClientAddressPool') ? gateway.vpnClientConfiguration.vpnClientAddressPool : ''
-      vpnClientProtocols: contains(gateway.vpnClientConfiguration, 'vpnClientProtocols') ? gateway.vpnClientConfiguration.vpnClientProtocols : ''
-      vpnAuthenticationTypes: contains(gateway.vpnClientConfiguration, 'vpnAuthenticationTypes') ? gateway.vpnClientConfiguration.vpnAuthenticationTypes : ''
-      aadTenant: contains(gateway.vpnClientConfiguration, 'aadTenant') ? gateway.vpnClientConfiguration.aadTenant : ''
-      aadAudience: contains(gateway.vpnClientConfiguration, 'aadAudience') ? gateway.vpnClientConfiguration.aadAudience : ''
-      aadIssuer: contains(gateway.vpnClientConfiguration, 'aadIssuer') ? gateway.vpnClientConfiguration.aadIssuer : ''
-      vpnClientRootCertificates: contains(gateway.vpnClientConfiguration, 'vpnClientRootCertificates') ? gateway.vpnClientConfiguration.vpnClientRootCertificates : ''
-      radiusServerAddress: contains(gateway.vpnClientConfiguration, 'radiusServerAddress') ? gateway.vpnClientConfiguration.radiusServerAddress : ''
-      radiusServerSecret: contains(gateway.vpnClientConfiguration, 'radiusServerSecret') ? gateway.vpnClientConfiguration.radiusServerSecret : ''
+      vpnClientAddressPool: gateway.vpnClientConfiguration.?vpnClientAddressPool ?? ''
+      vpnClientProtocols: gateway.vpnClientConfiguration.?vpnClientProtocols ?? ''
+      vpnAuthenticationTypes: gateway.vpnClientConfiguration.?vpnAuthenticationTypes ?? ''
+      aadTenant: gateway.vpnClientConfiguration.?aadTenant ?? ''
+      aadAudience: gateway.vpnClientConfiguration.?aadAudience ?? ''
+      aadIssuer: gateway.vpnClientConfiguration.?aadIssuer ?? ''
+      vpnClientRootCertificates: gateway.vpnClientConfiguration.?vpnClientRootCertificates ?? ''
+      radiusServerAddress: gateway.vpnClientConfiguration.?radiusServerAddress ?? ''
+      radiusServerSecret: gateway.vpnClientConfiguration.?radiusServerSecret ?? ''
     } : null
     ipConfigurations: [
       {
@@ -853,7 +855,7 @@ module modAzureFirewallMgmtPublicIp '../publicIp/publicIp.bicep' = if (parAzFire
   }
 }
 
-resource resFirewallPolicies 'Microsoft.Network/firewallPolicies@2023-02-01' = if (parAzFirewallEnabled) {
+resource resFirewallPolicies 'Microsoft.Network/firewallPolicies@2023-02-01' = if (parAzFirewallEnabled && parAzFirewallPoliciesEnabled) {
   name: parAzFirewallPoliciesName
   location: parLocation
   tags: parTags
@@ -1068,3 +1070,7 @@ output outPrivateDnsZonesNames array = (parPrivateDnsZonesEnabled ? modPrivateDn
 output outDdosPlanResourceId string = resDdosProtectionPlan.id
 output outHubVirtualNetworkName string = resHubVnet.name
 output outHubVirtualNetworkId string = resHubVnet.id
+output outHubRouteTableId string = parAzFirewallEnabled ? resHubRouteTable.id : ''
+output outHubRouteTableName string = parAzFirewallEnabled ? resHubRouteTable.name : ''
+output outBastionNsgId string = parAzBastionEnabled ? resBastionNsg.id : ''
+output outBastionNsgName string = parAzBastionEnabled ? resBastionNsg.name : ''

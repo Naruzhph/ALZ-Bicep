@@ -2,6 +2,7 @@
 
 [![Average time to resolve an issue](http://isitmaintained.com/badge/resolution/azure/alz-bicep.svg)](http://isitmaintained.com/project/azure/alz-bicep "Average time to resolve an issue")
 [![Percentage of issues still open](http://isitmaintained.com/badge/open/azure/alz-bicep.svg)](http://isitmaintained.com/project/azure/alz-bicep "Percentage of issues still open")
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Azure/ALZ-Bicep/badge)](https://scorecard.dev/viewer/?uri=github.com/Azure/ALZ-Bicep)
 
 [![Update Policy Library](https://github.com/Azure/ALZ-Bicep/actions/workflows/update-policy.yml/badge.svg?branch=main)](https://github.com/Azure/ALZ-Bicep/actions/workflows/update-policy.yml)
 ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/Azure/ALZ-Bicep?style=flat&logo=github)
@@ -115,7 +116,7 @@ For support on the artifacts contained in this repository, please refer to [this
 [wiki_resiliency]:                            https://github.com/Azure/ALZ-Bicep/wiki/Resiliency "Wiki - Resiliency"
 [wiki_contributing]:                          https://github.com/Azure/ALZ-Bicep/wiki/Contributing "Wiki - Contributing"
 [wiki_accelerator]:                          <https://github.com/Azure/ALZ-Bicep/wiki/Accelerator> "Wiki - Accelerator"
-[wiki_amba]:                            <https://github.com/Azure/ALZ-Bicep/wiki/Accelerator> "Wiki - AMBA"
+[wiki_amba]:                            <https://github.com/Azure/ALZ-Bicep/wiki/AzureMonitorBaselineAlerts> "Wiki - AMBA"
 [wiki_faq]:                          <https://github.com/Azure/ALZ-Bicep/wiki/FAQ> "Wiki - FAQs"
 [wiki_cuaid]:                          <https://github.com/Azure/ALZ-Bicep/wiki/CustomerUsage> "Wiki - Telemetry Usage ID"
 [wiki_acrdeploy]:                          <https://github.com/Azure/ALZ-Bicep/wiki/ACRDeployment> "Wiki - Private Bicep Registry"
