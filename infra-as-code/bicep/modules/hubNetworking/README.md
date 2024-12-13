@@ -22,20 +22,6 @@ Module deploys the following resources:
 > - Although there are generated parameter markdowns for Azure Commercial Cloud, this same module can still be used in Azure China. Example parameter are in the [parameters](./parameters/) folder.
 >
 > - The file `parameters/hubNetworking.parameters.az.all.json` contains parameter values for SKUs that are compatible with availability zones for relevant resource types. In cases where you are deploying to a region that does not support availability zones, you should opt for the `parameters/hubNetworking.parameters.all.json` file.
->
-> - When deploying using the `parameters/hubNetworking.parameters.all.json` you must update the `parPrivateDnsZones` parameter by replacing the `xxxxxx` placeholders with the deployment region or geo code, for Azure Backup. Failure to do so will cause these services to be unreachable over private endpoints.
->
-> For example, if deploying to East US the following zone entries:
-> - `privatelink.xxxxxx.azmk8s.io`
-> - `privatelink.xxxxxx.backup.windowsazure.com`
-> - `privatelink.xxxxxx.batch.azure.com`
->
-> Will become:
-> - `privatelink.eastus.azmk8s.io`
-> - `privatelink.eus.backup.windowsazure.com`
-> - `privatelink.eastus.batch.azure.com`
->
-> See child module, [`privateDnsZones.bicep` docs](https://github.com/Azure/ALZ-Bicep/tree/main/infra-as-code/bicep/modules/privateDnsZones#dns-zones) for more info on how this works
 
 To configure P2S VPN connections edit the vpnClientConfiguration value in the `parVpnGatewayConfig` parameter.
 
@@ -203,6 +189,8 @@ New-AzResourceGroupDeployment @inputObject
 ## Multi-region deployment
 
 To extend your infrastructure to [additional regions](https://learn.microsoft.com/azure/cloud-adoption-framework/ready/considerations/regions), this module can be deployed multiple times with different parameters files to deploy additional hubs in multiple regions. The [vnetPeering module](https://github.com/Azure/ALZ-Bicep/tree/main/infra-as-code/bicep/modules/vnetPeering) can be leveraged to peer the hub networks together across the different regions.
+
+If you want to use a single deployment targeting two regions, you can use the [hubNetworking-multiRegion.bicep](https://github.com/Azure/ALZ-Bicep/blob/main/infra-as-code/bicep/modules/hubNetworking/hubNetworking-multiRegion.bicep) file along with the [hubNetwork.parameters.az.multiRegion.all.parameters.json](https://github.com/Azure/ALZ-Bicep/blob/main/infra-as-code/bicep/modules/hubNetworking/parameters/hubNetworking.parameters.az.all.json) file. This module uses similar parameters from the `hubNetworking` module, but the parameters specific to the secondary region are suffixed with `SecondaryLocation`. It also leverages the `vnetPeering` module to peer the two hubs together.
 
 > For the example below, two hubs will be deployed across *eastus* and *westus* regions.
 
