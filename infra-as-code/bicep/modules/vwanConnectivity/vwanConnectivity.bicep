@@ -65,7 +65,66 @@ type virtualWanOptionsType = ({
 
   @sys.description('Availability Zones to deploy the Azure Firewall across. Region must support Availability Zones to use. If it does not then leave empty.')
   parAzFirewallAvailabilityZones: azFirewallAvailabilityZones?
+
+  @sys.description('Configuration of sidecar virtual network for the Virtual WAN Hub.')
+  parSidecarVirtualNetwork: sideCarVirtualNetworkType
 })[]
+
+type sideCarVirtualNetworkType = {
+  @description('The name of the sidecar virtual network.')
+  name: string?
+
+  @description('Disable the sidecar virtual network.')
+  sidecarVirtualNetworkEnabled: bool
+
+  @description('The address space of the sidecar virtual network.')
+  addressPrefixes: string[]
+
+  @description('The location of the sidecar virtual network.')
+  location: string?
+
+  @description('The resource ID of the virtual hub to associate with the sidecar virtual network.')
+  virtualHubIdOverride: string?
+
+  @description('Flow timeout in minutes for the virtual network.')
+  flowTimeoutInMinutes: int?
+
+  @description('Number of IP addresses allocated from the pool. To be used only when the addressPrefix param is defined with a resource ID of an IPAM pool.')
+  ipamPoolNumberOfIpAddresses: string?
+
+  @description('Resource lock configuration for the virtual network.')
+  lock: lockType?
+
+  @description('Virtual network peerings in addition to the primary VWAN Hub peering connection.')
+  vnetPeerings: array?
+
+  @description('Subnets for the virtual network.')
+  subnets: array?
+
+  @description('Enable VNet encryption for the virtual network.')
+  vnetEncryption: bool?
+
+  @description('If the encrypted VNet allows VM that does not support encryption. Can only be used when vnetEncryption is enabled.')
+  vnetEncryptionEnforcement: 'AllowUnencrypted' | 'DropUnencrypted'?
+
+  @description('Role assignments for the virtual network.')
+  roleAssignments: array?
+
+  @description('BGP community for the virtual network.')
+  virtualNetworkBgpCommunity: string?
+
+  @description('Diagnostic settings for the virtual network.')
+  diagnosticSettings: array?
+
+  @description('DNS servers for the virtual network.')
+  dnsServers: array?
+
+  @description('Enable VM protection for the virtual network.')
+  enableVmProtection: bool?
+
+  @description('DDoS protection plan resource ID.')
+  ddosProtectionPlanResourceIdOverride: string?
+}
 
 type lockType = {
   @description('Optional. Specify the name of lock.')
@@ -100,6 +159,9 @@ param parVirtualHubEnabled bool = true
 
 @sys.description('Prefix Used for Virtual WAN.')
 param parVirtualWanName string = '${parCompanyPrefix}-vwan-${parLocation}'
+
+@description('The type of Virtual WAN to create.')
+param parVirtualWanType string = 'Standard'
 
 @sys.description('''Resource Lock Configuration for Virtual WAN.
 
@@ -145,6 +207,12 @@ param parVirtualWanHubs virtualWanOptionsType = [
     parAzFirewallIntelMode: 'Alert'
     parAzFirewallTier: 'Standard'
     parAzFirewallAvailabilityZones: []
+    parSidecarVirtualNetwork: {
+      sidecarVirtualNetworkEnabled: true
+      addressPrefixes: [
+        '10.101.0.0/24'
+      ]
+    }
   }
 ]
 
@@ -274,11 +342,9 @@ var varCuaid = '7f94f23b-7a59-4a5c-9a8d-2a253a566f61'
 // ZTN Telemetry
 var varZtnP1CuaId = '3ab23b1e-c5c5-42d4-b163-1402384ba2db'
 var varZtnP1Trigger = (parDdosEnabled && !(contains(map(parVirtualWanHubs, hub => hub.parAzFirewallEnabled), false)) && (contains(
-    map(parVirtualWanHubs, hub => hub.parAzFirewallTier),
-    'Premium'
-  )))
-  ? true
-  : false
+  map(parVirtualWanHubs, hub => hub.?parAzFirewallTier),
+  'Premium'
+)))
 
 // Azure Firewalls in Hubs
 var varAzureFirewallInHubs = filter(parVirtualWanHubs, hub => hub.parAzFirewallEnabled == true)
@@ -291,7 +357,7 @@ var azureFirewallInHubsIndex = [
 ]
 
 // Virtual WAN resource
-resource resVwan 'Microsoft.Network/virtualWans@2023-04-01' = {
+resource resVwan 'Microsoft.Network/virtualWans@2024-05-01' = {
   name: parVirtualWanName
   location: parLocation
   tags: parTags
@@ -299,7 +365,7 @@ resource resVwan 'Microsoft.Network/virtualWans@2023-04-01' = {
     allowBranchToBranchTraffic: true
     allowVnetToVnetTraffic: true
     disableVpnEncryption: false
-    type: 'Standard'
+    type: parVirtualWanType
   }
 }
 
@@ -313,7 +379,7 @@ resource resVwanLock 'Microsoft.Authorization/locks@2020-05-01' = if (parGlobalR
   }
 }
 
-resource resVhub 'Microsoft.Network/virtualHubs@2023-04-01' = [
+resource resVhub 'Microsoft.Network/virtualHubs@2024-05-01' = [
   for hub in parVirtualWanHubs: if (parVirtualHubEnabled && !empty(hub.parVirtualHubAddressPrefix)) {
     name: hub.?parVirtualWanHubCustomName ?? '${parVirtualWanHubName}-${hub.parHubLocation}'
     location: hub.parHubLocation
@@ -344,7 +410,7 @@ resource resVhubLock 'Microsoft.Authorization/locks@2020-05-01' = [
   }
 ]
 
-resource resVhubRouteTable 'Microsoft.Network/virtualHubs/hubRouteTables@2023-04-01' = [
+resource resVhubRouteTable 'Microsoft.Network/virtualHubs/hubRouteTables@2024-05-01' = [
   for (hub, i) in parVirtualWanHubs: if (parVirtualHubEnabled && hub.parAzFirewallEnabled && empty(hub.parVirtualHubRoutingIntentDestinations)) {
     parent: resVhub[i]
     name: 'defaultRouteTable'
@@ -367,11 +433,11 @@ resource resVhubRouteTable 'Microsoft.Network/virtualHubs/hubRouteTables@2023-04
   }
 ]
 
-resource resVhubRoutingIntent 'Microsoft.Network/virtualHubs/routingIntent@2023-04-01' = [
+resource resVhubRoutingIntent 'Microsoft.Network/virtualHubs/routingIntent@2024-05-01' = [
   for (hub, i) in parVirtualWanHubs: if (parVirtualHubEnabled && hub.parAzFirewallEnabled && !empty(hub.parVirtualHubRoutingIntentDestinations)) {
     parent: resVhub[i]
     name: !empty(hub.?parVirtualWanHubCustomName)
-      ? '${hub.parVirtualWanHubCustomName}-Routing-Intent'
+      ? '${hub.?parVirtualWanHubCustomName}-Routing-Intent'
       : '${parVirtualWanHubName}-${hub.parHubLocation}-Routing-Intent'
     properties: {
       routingPolicies: [
@@ -387,7 +453,47 @@ resource resVhubRoutingIntent 'Microsoft.Network/virtualHubs/routingIntent@2023-
   }
 ]
 
-resource resVpnGateway 'Microsoft.Network/vpnGateways@2023-02-01' = [
+module modSidecarVirtualNetwork 'br/public:avm/res/network/virtual-network:0.7.0' = [
+  for (hub, i) in parVirtualWanHubs: if (hub.parSidecarVirtualNetwork.sidecarVirtualNetworkEnabled) {
+    params: {
+      name: hub.parSidecarVirtualNetwork.?name ?? '${parCompanyPrefix}-sidecar-vnet-${hub.parHubLocation}'
+      addressPrefixes: hub.parSidecarVirtualNetwork.addressPrefixes
+      location: hub.parSidecarVirtualNetwork.?location != null ? hub.parSidecarVirtualNetwork.?location : hub.parHubLocation
+      flowTimeoutInMinutes: hub.parSidecarVirtualNetwork.?flowTimeoutInMinutes != null ? hub.parSidecarVirtualNetwork.?flowTimeoutInMinutes : 0
+      ipamPoolNumberOfIpAddresses: hub.parSidecarVirtualNetwork.?ipamPoolNumberOfIpAddresses != null ? hub.parSidecarVirtualNetwork.?ipamPoolNumberOfIpAddresses : null
+      lock: (parGlobalResourceLock.kind != 'None' || (hub.parSidecarVirtualNetwork.?lock != null && hub.parSidecarVirtualNetwork.?lock.?kind != 'None')) ? {
+        name: hub.parSidecarVirtualNetwork.?lock.?name ?? 'pl-sidecar-vnet-lock'
+        kind: (parGlobalResourceLock.kind != 'None') ? parGlobalResourceLock.kind : hub.parSidecarVirtualNetwork.?lock.?kind
+        notes: (parGlobalResourceLock.kind != 'None') ? parGlobalResourceLock.?notes : hub.parSidecarVirtualNetwork.?lock.?notes ?? 'This lock was created by the ALZ Bicep vWAN Connectivity Module.'
+      } : null
+      peerings: hub.parSidecarVirtualNetwork.?vnetPeerings != null ? hub.parSidecarVirtualNetwork.?vnetPeerings : []
+      subnets: hub.parSidecarVirtualNetwork.?subnets != null ? hub.parSidecarVirtualNetwork.?subnets : []
+      vnetEncryption: hub.parSidecarVirtualNetwork.?vnetEncryption != null ? hub.parSidecarVirtualNetwork.?vnetEncryption : null
+      vnetEncryptionEnforcement: hub.parSidecarVirtualNetwork.?vnetEncryptionEnforcement != null ? hub.parSidecarVirtualNetwork.?vnetEncryptionEnforcement : null
+      roleAssignments: hub.parSidecarVirtualNetwork.?roleAssignments
+      virtualNetworkBgpCommunity: hub.parSidecarVirtualNetwork.?virtualNetworkBgpCommunity != null ? hub.parSidecarVirtualNetwork.?virtualNetworkBgpCommunity : null
+      tags: parTags
+      diagnosticSettings: hub.parSidecarVirtualNetwork.?diagnosticSettings != null ? hub.parSidecarVirtualNetwork.?diagnosticSettings : []
+      dnsServers: hub.parSidecarVirtualNetwork.?dnsServers != null ? hub.parSidecarVirtualNetwork.?dnsServers : []
+      enableVmProtection: hub.parSidecarVirtualNetwork.?enableVmProtection != null ? hub.parSidecarVirtualNetwork.?enableVmProtection : null
+      ddosProtectionPlanResourceId: parDdosEnabled ? resDdosProtectionPlan.id : null
+      enableTelemetry: parTelemetryOptOut ? false : true
+    }
+  }
+]
+
+module modVnetPeeringVwan '../vnetPeeringVwan/vnetPeeringVwan.bicep' = [
+  for (hub, i) in parVirtualWanHubs: if (hub.parSidecarVirtualNetwork.sidecarVirtualNetworkEnabled) {
+    name: take('deploy-vnet-peering-vwan-${hub.parSidecarVirtualNetwork.?name}-${hub.parHubLocation}', 64)
+    scope: subscription()
+    params: {
+      parRemoteVirtualNetworkResourceId: modSidecarVirtualNetwork[i].outputs.resourceId
+      parVirtualWanHubResourceId: resVhub[0].id
+    }
+  }
+]
+
+resource resVpnGateway 'Microsoft.Network/vpnGateways@2024-05-01' = [
   for (hub, i) in parVirtualWanHubs: if ((parVirtualHubEnabled) && (hub.parVpnGatewayEnabled)) {
     dependsOn: resVhub
     name: hub.?parVpnGatewayCustomName ?? '${parVpnGatewayName}-${hub.parHubLocation}'
@@ -419,7 +525,7 @@ resource resVpnGatewayLock 'Microsoft.Authorization/locks@2020-05-01' = [
   }
 ]
 
-resource resErGateway 'Microsoft.Network/expressRouteGateways@2023-02-01' = [
+resource resErGateway 'Microsoft.Network/expressRouteGateways@2024-05-01' = [
   for (hub, i) in parVirtualWanHubs: if ((parVirtualHubEnabled) && (hub.parExpressRouteGatewayEnabled)) {
     dependsOn: resVhub
     name: hub.?parExpressRouteGatewayCustomName ?? '${parExpressRouteGatewayName}-${hub.parHubLocation}'
@@ -451,15 +557,15 @@ resource resErGatewayLock 'Microsoft.Authorization/locks@2020-05-01' = [
 ]
 
 // Create Azure Firewall Policy (per region) resources if parAzFirewallEnabled is true and parAzFirewallPolicyDeploymentStyle is set to PerRegion
-resource resFirewallPolicies 'Microsoft.Network/firewallPolicies@2023-02-01' = [
+resource resFirewallPolicies 'Microsoft.Network/firewallPolicies@2024-05-01' = [
   for (hub, i) in parVirtualWanHubs: if (parVirtualHubEnabled && parVirtualWanHubs[i].parAzFirewallEnabled && parAzFirewallPolicyDeploymentStyle == 'PerRegion') {
     name: hub.?parAzFirewallPolicyCustomName ?? '${parAzFirewallPoliciesName}-${hub.parHubLocation}'
     location: hub.parHubLocation
     tags: parTags
-    properties: (hub.parAzFirewallTier == 'Basic')
+    properties: (hub.?parAzFirewallTier == 'Basic')
       ? {
           sku: {
-            tier: hub.parAzFirewallTier
+            tier: hub.?parAzFirewallTier
           }
           snat: !empty(parAzFirewallPoliciesPrivateRanges)
             ? {
@@ -471,13 +577,13 @@ resource resFirewallPolicies 'Microsoft.Network/firewallPolicies@2023-02-01' = [
         }
       : {
           dnsSettings: {
-            enableProxy: hub.parAzFirewallDnsProxyEnabled
-            servers: hub.parAzFirewallDnsServers
+            enableProxy: hub.?parAzFirewallDnsProxyEnabled
+            servers: hub.?parAzFirewallDnsServers
           }
           sku: {
-            tier: hub.parAzFirewallTier
+            tier: hub.?parAzFirewallTier
           }
-          threatIntelMode: hub.parAzFirewallIntelMode
+          threatIntelMode: hub.?parAzFirewallIntelMode
         }
   }
 ]
@@ -495,14 +601,14 @@ resource resFirewallPoliciesLock 'Microsoft.Authorization/locks@2020-05-01' = [
 ]
 
 // Shared Global Azure Firewall Policy
-resource resFirewallPoliciesSharedGlobal 'Microsoft.Network/firewallPolicies@2023-02-01' = if (parVirtualHubEnabled && parVirtualWanHubs[0].parAzFirewallEnabled && parAzFirewallPolicyDeploymentStyle == 'SharedGlobal') {
+resource resFirewallPoliciesSharedGlobal 'Microsoft.Network/firewallPolicies@2024-05-01' = if (parVirtualHubEnabled && parVirtualWanHubs[0].parAzFirewallEnabled && parAzFirewallPolicyDeploymentStyle == 'SharedGlobal') {
   name: parVirtualWanHubs[0].?parAzFirewallPolicyCustomName ?? '${parAzFirewallPoliciesName}-${parVirtualWanHubs[0].parHubLocation}'
   location: parVirtualWanHubs[0].parHubLocation
   tags: parTags
-  properties: (parVirtualWanHubs[0].parAzFirewallTier == 'Basic')
+  properties: (parVirtualWanHubs[0].?parAzFirewallTier == 'Basic')
     ? {
         sku: {
-          tier: parVirtualWanHubs[0].parAzFirewallTier
+          tier: parVirtualWanHubs[0].?parAzFirewallTier
         }
         snat: !empty(parAzFirewallPoliciesPrivateRanges)
           ? {
@@ -514,13 +620,13 @@ resource resFirewallPoliciesSharedGlobal 'Microsoft.Network/firewallPolicies@202
       }
     : {
         dnsSettings: {
-          enableProxy: parVirtualWanHubs[0].parAzFirewallDnsProxyEnabled
-          servers: parVirtualWanHubs[0].parAzFirewallDnsServers
+          enableProxy: parVirtualWanHubs[0].?parAzFirewallDnsProxyEnabled
+          servers: parVirtualWanHubs[0].?parAzFirewallDnsServers
         }
         sku: {
-          tier: parVirtualWanHubs[0].parAzFirewallTier
+          tier: parVirtualWanHubs[0].?parAzFirewallTier
         }
-        threatIntelMode: parVirtualWanHubs[0].parAzFirewallIntelMode
+        threatIntelMode: parVirtualWanHubs[0].?parAzFirewallIntelMode
       }
 }
 
@@ -534,12 +640,12 @@ resource resFirewallPoliciesLockSharedGlobal 'Microsoft.Authorization/locks@2020
   }
 }
 
-resource resAzureFirewall 'Microsoft.Network/azureFirewalls@2023-02-01' = [
+resource resAzureFirewall 'Microsoft.Network/azureFirewalls@2024-05-01' = [
   for (hub, i) in parVirtualWanHubs: if ((parVirtualHubEnabled) && (hub.parAzFirewallEnabled)) {
     name: hub.?parAzFirewallCustomName ?? '${parAzFirewallName}-${hub.parHubLocation}'
     location: hub.parHubLocation
     tags: parTags
-    zones: (!empty(hub.parAzFirewallAvailabilityZones) ? hub.parAzFirewallAvailabilityZones : null)
+    zones: (!empty(hub.?parAzFirewallAvailabilityZones) ? hub.?parAzFirewallAvailabilityZones : null)
     properties: {
       hubIPAddresses: {
         publicIPs: {
@@ -548,7 +654,7 @@ resource resAzureFirewall 'Microsoft.Network/azureFirewalls@2023-02-01' = [
       }
       sku: {
         name: 'AZFW_Hub'
-        tier: hub.parAzFirewallTier
+        tier: hub.?parAzFirewallTier
       }
       virtualHub: {
         id: parVirtualHubEnabled ? resVhub[i].id : ''
@@ -575,7 +681,7 @@ resource resAzureFirewallLock 'Microsoft.Authorization/locks@2020-05-01' = [
 ]
 
 // DDoS plan is deployed even though not supported to attach to Virtual WAN today as per https://docs.microsoft.com/azure/firewall-manager/overview#known-issues - However, it can still be linked via policy to spoke VNets etc.
-resource resDdosProtectionPlan 'Microsoft.Network/ddosProtectionPlans@2023-02-01' = if (parDdosEnabled) {
+resource resDdosProtectionPlan 'Microsoft.Network/ddosProtectionPlans@2024-05-01' = if (parDdosEnabled) {
   name: parDdosPlanName
   location: parLocation
   tags: parTags
@@ -592,7 +698,7 @@ resource resDDoSProtectionPlanLock 'Microsoft.Authorization/locks@2020-05-01' = 
 }
 
 // Private DNS Zones cannot be linked to the Virtual WAN Hub today however, they can be linked to spokes as they are normal VNets as per https://docs.microsoft.com/azure/virtual-wan/howto-private-link
-module modPrivateDnsZonesAVM 'br/public:avm/ptn/network/private-link-private-dns-zones:0.2.1' = if (parPrivateDnsZonesEnabled) {
+module modPrivateDnsZonesAVM 'br/public:avm/ptn/network/private-link-private-dns-zones:0.3.0' = if (parPrivateDnsZonesEnabled) {
   name: 'deploy-Private-DNS-Zones-AVM-Single'
   scope: resourceGroup(parPrivateDnsZonesResourceGroup)
   params: {

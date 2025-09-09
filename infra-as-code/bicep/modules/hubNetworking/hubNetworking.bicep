@@ -301,6 +301,8 @@ param parVpnGatewayConfig object = {
     peerWeight: 5
   }
   vpnClientConfiguration: {}
+  ipConfigurationName: 'vnetGatewayConfig'
+  ipConfigurationActiveActiveName: 'vnetGatewayConfig2'
 }
 
 @sys.description('Switch to enable/disable ExpressRoute virtual network gateway deployment.')
@@ -323,6 +325,8 @@ param parExpressRouteGatewayConfig object = {
     bgpPeeringAddress: ''
     peerWeight: '5'
   }
+  ipConfigurationName: 'vnetGatewayConfig'
+  ipConfigurationActiveActiveName: 'vnetGatewayConfig2'
 }
 
 @sys.description('''Resource Lock Configuration for ExpressRoute Virtual Network Gateway.
@@ -407,7 +411,7 @@ var varCuaid = '2686e846-5fdc-4d4f-b533-16dcb09d6e6c'
 
 // ZTN Telemetry
 var varZtnP1CuaId = '3ab23b1e-c5c5-42d4-b163-1402384ba2db'
-var varZtnP1Trigger = (parDdosEnabled && parAzFirewallEnabled && (parAzFirewallTier == 'Premium')) ? true : false
+var varZtnP1Trigger = (parDdosEnabled && parAzFirewallEnabled && (parAzFirewallTier == 'Premium'))
 
 var varAzFirewallUseCustomPublicIps = length(parAzFirewallCustomPublicIps) > 0
 
@@ -428,7 +432,7 @@ resource resDDoSProtectionPlanLock 'Microsoft.Authorization/locks@2020-05-01' = 
   }
 }
 
-resource resHubVnet 'Microsoft.Network/virtualNetworks@2023-02-01' = {
+resource resHubVnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
   dependsOn: [
     resBastionNsg
   ]
@@ -482,12 +486,12 @@ module modBastionPublicIp '../publicIp/publicIp.bicep' = if (parAzBastionEnabled
   }
 }
 
-resource resBastionSubnetRef 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' existing = if (parAzBastionEnabled) {
+resource resBastionSubnetRef 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' existing = if (parAzBastionEnabled) {
   parent: resHubVnet
   name: 'AzureBastionSubnet'
 }
 
-resource resBastionNsg 'Microsoft.Network/networkSecurityGroups@2024-01-01' = if (parAzBastionEnabled) {
+resource resBastionNsg 'Microsoft.Network/networkSecurityGroups@2024-05-01' = if (parAzBastionEnabled) {
   name: parAzBastionNsgName
   location: parLocation
   tags: parTags
@@ -649,7 +653,7 @@ resource resBastionNsgLock 'Microsoft.Authorization/locks@2020-05-01' = if (parA
 // AzureBastionSubnet is required to deploy Bastion service. This subnet must exist in the parsubnets array if you enable Bastion Service.
 // There is a minimum subnet requirement of /27 prefix.
 // If you are deploying standard this needs to be larger. https://docs.microsoft.com/en-us/azure/bastion/configuration-settings#subnet
-resource resBastion 'Microsoft.Network/bastionHosts@2024-01-01' = if (parAzBastionEnabled) {
+resource resBastion 'Microsoft.Network/bastionHosts@2024-05-01' = if (parAzBastionEnabled) {
   location: parLocation
   name: parAzBastionName
   tags: parTags
@@ -685,7 +689,7 @@ resource resBastionLock 'Microsoft.Authorization/locks@2020-05-01' = if (parAzBa
   }
 }
 
-resource resGatewaySubnetRef 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' existing = if (parVpnGatewayEnabled || parExpressRouteGatewayEnabled) {
+resource resGatewaySubnetRef 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' existing = if (parVpnGatewayEnabled || parExpressRouteGatewayEnabled) {
   parent: resHubVnet
   name: 'GatewaySubnet'
 }
@@ -754,7 +758,7 @@ module modGatewayPublicIpActiveActive '../publicIp/publicIp.bicep' = [
 ]
 
 //Minumum subnet size is /27 supporting documentation https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-about-vpn-gateway-settings#gwsub
-resource resGateway 'Microsoft.Network/virtualNetworkGateways@2024-01-01' = [
+resource resGateway 'Microsoft.Network/virtualNetworkGateways@2024-05-01' = [
   for (gateway, i) in varGwConfig: if ((gateway.name != 'noconfigVpn') && (gateway.name != 'noconfigEr')) {
     name: gateway.name
     location: parLocation
@@ -791,7 +795,7 @@ resource resGateway 'Microsoft.Network/virtualNetworkGateways@2024-01-01' = [
         [
           {
             id: resHubVnet.id
-            name: 'vnetGatewayConfig1'
+            name: gateway.ipConfigurationName
             properties: {
               publicIPAddress: {
                 id: modGatewayPublicIp[i].outputs.outPublicIpId // Primary Public IP
@@ -807,7 +811,7 @@ resource resGateway 'Microsoft.Network/virtualNetworkGateways@2024-01-01' = [
           ? [
               {
                 id: resHubVnet.id
-                name: 'vnetGatewayConfig2'
+                name: gateway.ipConfigurationActiveActiveName
                 properties: {
                   publicIPAddress: {
                     id: modGatewayPublicIpActiveActive[i].outputs.outPublicIpId // Secondary Public IP
@@ -836,12 +840,12 @@ resource resVirtualNetworkGatewayLock 'Microsoft.Authorization/locks@2020-05-01'
   }
 ]
 
-resource resAzureFirewallSubnetRef 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' existing = if (parAzFirewallEnabled) {
+resource resAzureFirewallSubnetRef 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' existing = if (parAzFirewallEnabled) {
   parent: resHubVnet
   name: 'AzureFirewallSubnet'
 }
 
-resource resAzureFirewallMgmtSubnetRef 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' existing = if (parAzFirewallEnabled && (contains(
+resource resAzureFirewallMgmtSubnetRef 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' existing = if (parAzFirewallEnabled && (contains(
   map(parSubnets, subnets => subnets.name),
   'AzureFirewallManagementSubnet'
 ))) {
@@ -890,7 +894,7 @@ module modAzureFirewallMgmtPublicIp '../publicIp/publicIp.bicep' = if (parAzFire
   }
 }
 
-resource resFirewallPolicies 'Microsoft.Network/firewallPolicies@2024-01-01' = if (parAzFirewallEnabled && parAzFirewallPoliciesEnabled) {
+resource resFirewallPolicies 'Microsoft.Network/firewallPolicies@2024-05-01' = if (parAzFirewallEnabled && parAzFirewallPoliciesEnabled) {
   name: parAzFirewallPoliciesName
   location: parLocation
   tags: parTags
@@ -931,7 +935,7 @@ resource resFirewallPoliciesLock 'Microsoft.Authorization/locks@2020-05-01' = if
 
 // AzureFirewallSubnet is required to deploy Azure Firewall . This subnet must exist in the parsubnets array if you deploy.
 // There is a minimum subnet requirement of /26 prefix.
-resource resAzureFirewall 'Microsoft.Network/azureFirewalls@2024-01-01' = if (parAzFirewallEnabled) {
+resource resAzureFirewall 'Microsoft.Network/azureFirewalls@2024-05-01' = if (parAzFirewallEnabled) {
   dependsOn: [
     resGateway
   ]
@@ -1044,7 +1048,7 @@ resource resAzureFirewallLock 'Microsoft.Authorization/locks@2020-05-01' = if (p
 }
 
 //If Azure Firewall is enabled we will deploy a RouteTable to redirect Traffic to the Firewall.
-resource resHubRouteTable 'Microsoft.Network/routeTables@2024-01-01' = if (parAzFirewallEnabled) {
+resource resHubRouteTable 'Microsoft.Network/routeTables@2024-05-01' = if (parAzFirewallEnabled) {
   name: parHubRouteTableName
   location: parLocation
   tags: parTags
@@ -1075,7 +1079,7 @@ resource resHubRouteTableLock 'Microsoft.Authorization/locks@2020-05-01' = if (p
   }
 }
 
-module modPrivateDnsZonesAVM 'br/public:avm/ptn/network/private-link-private-dns-zones:0.2.1' = if (parPrivateDnsZonesEnabled) {
+module modPrivateDnsZonesAVM 'br/public:avm/ptn/network/private-link-private-dns-zones:0.3.0' = if (parPrivateDnsZonesEnabled) {
   name: 'deploy-Private-DNS-Zones-AVM-Single'
   scope: resourceGroup(parPrivateDnsZonesResourceGroup)
   params: {
